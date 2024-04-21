@@ -4,6 +4,8 @@ import torch
 import pandas as pd
 import torch.nn as nn
 import torch.nn.functional as F
+import os
+import re
 
 mean = None
 std = None
@@ -43,7 +45,9 @@ def load_model(model_path, model_class, *args, **kwargs):
     model.to(device)
     return model
 
-
+def clean_id(input_string):
+    cleaned_string = re.sub(r'[^\d]+$', '', input_string)
+    return cleaned_string
 
 def get_time_left(stage,size):
     multiplier = 0
@@ -92,14 +96,19 @@ def finish_q_prediction(img_id,time_left_prediction,df_info):
     w = [4,1]
     ground_broken = sum([(int(val)*w[i]) for i,val in enumerate(str(ground_broken).split('.'))])
     est_finish_q = ground_broken + time_left_prediction
-    est_finish_q = str(est_finish_q//4) + '.' + str(est_finish_q%4)
+    if est_finish_q % 4 == 0:
+        est_finish_q = str(est_finish_q//4 - 1) + '.4'
+    else:
+        est_finish_q = str(est_finish_q//4) + '.' + str(est_finish_q%4)
     return est_finish_q
 
 def run_prediction(image_path,df_info):
     image_tensor = process_image(image_path)
     stage_prediction = predict(image_tensor)
-    img_id = int(''.join(list(image_path.split('/')[-1])[:10]))
+    img_id = int(clean_id(''.join(list(image_path.split('\\')[-1])[:10])))
     time_left_prediction = get_time_left(stage_prediction,df_info.loc[df_info['PropertyID'] == img_id, 'Size_sf'].values[0])
+    # round down since our thresholds are upper bounds
+    time_left_prediction = int(time_left_prediction)
     return finish_q_prediction(img_id,time_left_prediction,df_info)
 
 
@@ -122,6 +131,22 @@ def main():
 
     print(start_prediction(img_path,df))
     
+# use this to iterate over multiple images
+# please contact GOTWIC on discord or sr6474@nyu.edu if you need help with this
+def main2():
+    df = pd.read_csv('https://www.dropbox.com/scl/fi/xl6leojssqiz12a6g6e35/Atlanta_supply_dat.xlsx-UC_buildings.csv?rlkey=9t4h432b0d5160kivwut4wwyy&dl=1')\
+    # create a new column called 'EstimatedFinishQuarter' and fill it with the estimated finish quarter
+    df['CompletionYearQuarter'] = None
+    for folder in range(0, 5):
+        folder_path = os.path.join('labeled_data', str(folder))
+        for filename in os.listdir(folder_path):
+            if filename.endswith('.jpg') or filename.endswith('.png'):
+                file_path = os.path.join(folder_path, filename)
+                est_finish_q = start_prediction(file_path,df)
+                img_id = int(clean_id(''.join(list(file_path.split('\\')[-1])[:10])))
+                df.loc[df['PropertyID'] == img_id, 'CompletionYearQuarter'] = est_finish_q
+    
+    df.to_csv('EstimatedFinishQuarter.csv', index=False)
 
 
 if __name__ == '__main__':
