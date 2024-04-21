@@ -87,29 +87,41 @@ def predict(image_tensor):
         _, predicted = torch.max(output, 1) 
     return predicted.item()
 
+def finish_q_prediction(img_id,time_left_prediction,df_info):
+    ground_broken = df_info.loc[df_info['PropertyID'] == img_id, 'YearQuarterGroundBroken'].values[0]
+    w = [4,1]
+    ground_broken = sum([(int(val)*w[i]) for i,val in enumerate(str(ground_broken).split('.'))])
+    est_finish_q = ground_broken + time_left_prediction
+    est_finish_q = str(est_finish_q//4) + '.' + str(est_finish_q%4)
+    return est_finish_q
+
 def run_prediction(image_path,df_info):
     image_tensor = process_image(image_path)
     stage_prediction = predict(image_tensor)
     img_id = int(''.join(list(image_path.split('/')[-1])[:10]))
     time_left_prediction = get_time_left(stage_prediction,df_info.loc[df_info['PropertyID'] == img_id, 'Size_sf'].values[0])
-    print(f'Stage Prediction: {stage_prediction} | Time Left Prediction: {time_left_prediction} quarters')
+    return finish_q_prediction(img_id,time_left_prediction,df_info)
 
 
-def main():
+def start_prediction(image_path,df_info):
     global mean
     global std
     global model
     mean = np.load('mean.npy')
     std = np.load('std.npy')
     model = load_model('cnn_model.pth', ConvNet1)
+    return run_prediction(image_path,df_info)
 
+def main():
     # Example of how to run the prediction
-    img_path = 'labeled_data/0/1652880652_bing.jpg'
-    df = pd.read_csv('https://www.dropbox.com/scl/fi/xl6leojssqiz12a6g6e35/Atlanta_supply_dat.xlsx-UC_buildings.csv?rlkey=9t4h432b0d5160kivwut4wwyy&dl=1')
 
     # image path MUST contain property ID and must be in the form */{propertyID}*.jpg
     # df is the dataframe containing the information about the properties, we need this to get the size of the property
-    run_prediction('labeled_data/0/1652880652_bing.jpg',df)
+    img_path = 'labeled_data/0/1652880652_bing.jpg'
+    df = pd.read_csv('https://www.dropbox.com/scl/fi/xl6leojssqiz12a6g6e35/Atlanta_supply_dat.xlsx-UC_buildings.csv?rlkey=9t4h432b0d5160kivwut4wwyy&dl=1')
+
+    print(start_prediction(img_path,df))
+    
 
 
 if __name__ == '__main__':
